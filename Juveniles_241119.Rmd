@@ -1,0 +1,130 @@
+---
+title: "All juveniles"
+output: html_notebook
+---
+
+```{r}
+#Clear objects from work space and restart Rstudio
+library(MASS)
+detach()
+rm(list=ls()) 
+.rs.restartR()
+```
+```{r}
+#Used libraries
+library(arm)
+library(MASS)
+library(brms)
+library(tidybayes)
+library(rstan)
+library(tidyr)
+library(broom.mixed)
+library(coda)
+library(dplyr)
+library(emmeans)
+```
+
+
+
+
+```{r}
+#Import data
+library(readxl)
+data <- read_excel("DATASET.xlsx", 
+    sheet = "Fledglings")
+View(data)
+```
+
+
+```{r}
+names(data)
+```
+
+
+```{r}
+#Dependent variables
+data$S<-data$`RECRUITED (0 = NO, 1 = YES)`
+#Z-transform independent continuous variables and rename variables
+data$DATE<-scale(data$STANDARDIZED_HATCHING_DATE,scale = T,center = T)
+data$RK<-as.factor(data$HATCHING_ORDER)
+data$AVMEI<-scale(data$MEAN_NATAL_ENSO_CONDITIONS,scale = T,center = T)
+
+#Random effects
+data$BC<-as.factor(data$BIRTH_COHORT)
+data$N<-as.factor(data$NEST_ID)
+
+
+```
+
+```{r}
+#Detection of computer cores 
+options(mc.cores = parallel::detectCores())
+```
+
+
+```{r}
+#Model
+m1<-brm(S~DATE+RK+AVMEI+AVMEI*RK+(1|BC)+(1|N),family = bernoulli(),
+        data=data,
+                   warmup = 1000,  
+                   iter = 10000, 
+                   chains = 5, 
+        prior = set_prior("normal(0,1)"),
+                   cores=10,
+                   seed = 123)
+
+```
+
+
+```{r}
+summary(m1) 
+```
+
+
+```{r}
+tidy(m1,conf.int = TRUE, conf.method = "HPDinterval",conf.level = 0.89)
+```
+
+
+
+
+```{r}
+#Plot model
+library(ggplot2)
+
+me <- conditional_effects(m1, "AVMEI:RK")
+
+plot(me, plot = FALSE,points = T,point_args = list(width=0,height=0.1,shape=1)
+)[[1]]+theme_bw()+scale_x_continuous(breaks = seq(-1.5,4,.5))+scale_y_continuous(breaks = seq(0,1,0.1),limits = c(0,1))+facet_wrap(~RK , labeller = label_both)
+
+
+
+```
+
+
+```{r}
+#Save plot as PDF
+ggsave(filename="recruitment AVMEI points.pdf", device="pdf",
+        height=20, width=40, units="cm", dpi=500)
+```
+
+
+
+
+```{r}
+#Contrasts
+library(emmeans)
+
+
+rg<-ref_grid(m1)
+em<-emmeans(rg,pairwise~RK*AVMEI)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+
+
+
+
+
+
+

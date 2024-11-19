@@ -1,0 +1,182 @@
+---
+title: "All recruits"
+output: html_notebook
+---
+
+
+```{r}
+#Clear objects from work space and restart Rstudio
+library(MASS)
+detach()
+rm(list=ls()) 
+.rs.restartR()
+```
+```{r}
+#Used libraries
+library(arm)
+library(MASS)
+library(brms)
+library(tidybayes)
+library(rstan)
+library(tidyr)
+library(broom.mixed)
+library(coda)
+library(dplyr)
+library(emmeans)
+```
+
+
+
+
+```{r}
+#Import data
+library(readxl)
+data <- read_excel("DATASET.xlsx", 
+    sheet = "Recruits")
+View(data)
+```
+
+```{r}
+names(data)
+```
+
+
+```{r}
+#Dependent variables
+data$FR<-data$AGE_AT_FIRST_REPRODUCTION
+data$LR<-data$LONGEVITY
+data$FL<-data$NUMBER_FLEDGLINGS
+data$LS<-data$`NUMBER_VIABLE_OFFSPRING (RECRUITS)`
+data$GAPS<-data$TOTAL_GAP_YEARS
+
+#Random effect
+data$BC<-as.factor(data$BIRTH_COHORT)
+
+#Z-transform independent continuous variables and rename variables
+data$SX<-as.factor(data$`SEX (0 = MALES, 1 = FEMALES)`)
+data$RK<-as.factor(data$HATCHING_ORDER)
+
+data$MEI<-scale(data$MEAN_NATAL_ENSO_CONDITIONS,scale=T,center = T)
+data$ZF<-scale(data$AGE_AT_FIRST_REPRODUCTION,scale = T,center = T)
+data$ZL<-scale(data$LONGEVITY,scale=T,center = T)
+data$SB<-scale(data$TOTAL_GAP_YEARS,scale = T,center=T)
+
+
+```
+
+```{r}
+#Detection of computer cores 
+options(mc.cores = parallel::detectCores())
+```
+
+
+
+
+```{r}
+#Models 
+AF<-bf(FR~(1|q|BC)+MEI+RK+SX+MEI*SX)+poisson()
+LONG<-bf(LR~(1|q|BC)+RK+SX+ZF+SB+MEI)+poisson()
+FLD<-bf(FL~(1|q|BC)+RK+SX+ZF+ZL+SB+MEI)+poisson()
+GP<-bf(GAPS~(1|q|BC)+RK+SX+ZF+ZL+MEI)+poisson()
+LRS<-bf(LS~(1|q|BC)+RK+SX+ZF+ZL+SB+MEI)+poisson()
+
+```
+
+
+
+
+```{r}
+#Penta-variate model
+m1<-brm(AF+LONG+FLD+LRS+GP,
+        data=data,
+                   warmup = 1000,  
+                   iter = 10000, 
+                   chains = 5, 
+        prior = set_prior("normal(0,1)"),
+                   cores=10,
+                   seed = 123)
+
+```
+
+```{r}
+summary(m1)
+```
+
+
+```{r}
+tidy(m1,conf.int = TRUE, conf.method = "HPDinterval",conf.level = 0.89)
+```
+
+
+
+```{r}
+#Contrasts
+library(emmeans)
+#Age at first reproduction sub-model
+rg<-ref_grid(m1,resp="FR")
+em<-emmeans(rg,pairwise~SX*MEI)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+```{r}
+#Longevity sub-model
+rg<-ref_grid(m1,resp="LR")
+em<-emmeans(rg,pairwise~RK)
+summary(em,point.est=mean,type="response",level=0.89)
+
+em<-emmeans(rg,pairwise~SX)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+
+
+```{r}
+#Number of offspring sub-model
+rg<-ref_grid(m1,resp="FL")
+em<-emmeans(rg,pairwise~RK)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+```{r}
+em<-emmeans(rg,pairwise~SX)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+
+
+
+```{r}
+#Number of viable offspring sub-model
+rg<-ref_grid(m1,resp="LS")
+em<-emmeans(rg,pairwise~RK)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+```{r}
+em<-emmeans(rg,pairwise~SX)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+
+
+
+```{r}
+#Total number of gap years sub-model
+rg<-ref_grid(m1,resp="GAPS")
+em<-emmeans(rg,pairwise~RK)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+```{r}
+em<-emmeans(rg,pairwise~SX)
+summary(em,point.est=mean,type="response",level=0.89)
+```
+
+
+
+
+
+
+
+
+
